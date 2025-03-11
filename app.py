@@ -5,11 +5,6 @@ import os
 
 app = Flask(__name__)
 
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Render assigns a dynamic port
-    app.run(host="0.0.0.0", port=port, debug=True)
-
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
     data = request.json
@@ -18,7 +13,6 @@ def capture_faces():
     if not person_name:
         return jsonify({"error": "Name is required"}), 400
 
-    # ✅ Pass the name as an argument instead of waiting for input
     subprocess.Popen(["python", "capture_faces.py", person_name])
 
     return jsonify({"message": f"Capturing started for {person_name}"}), 202
@@ -31,7 +25,7 @@ def recognize_faces():
             ["python", "recognize_faces.py"],
             capture_output=True,
             text=True,
-            encoding="utf-8"  # Ensure proper encoding
+            encoding="utf-8"
         )
 
         if result.stderr:
@@ -40,15 +34,14 @@ def recognize_faces():
         if not result.stdout:
             return jsonify({"error": "No output from subprocess"}), 500
 
-        # Extract JSON part from stdout
         lines = result.stdout.strip().split("\n")
         for line in lines:
-            if line.startswith("{") and line.endswith("}"):  # Find valid JSON
+            if line.startswith("{") and line.endswith("}"):
                 try:
                     json_output = json.loads(line)
                     return jsonify(json_output)
                 except json.JSONDecodeError:
-                    continue  # Skip invalid lines
+                    continue  
 
         return jsonify({"error": "No valid JSON output"}), 500
 
@@ -79,4 +72,5 @@ def train_model():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 10000))  # Render assigns a dynamic port
+    app.run(host="0.0.0.0", port=port, debug=True)
