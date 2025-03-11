@@ -3,20 +3,24 @@ import os
 import sys
 import time
 
-# ✅ Get person name from command-line argument (instead of input)
+# ✅ Ensure person name is provided
 if len(sys.argv) < 2:
     print("❌ Error: Name is required")
     sys.exit(1)
 
-person_name = sys.argv[1]  # Read from arguments
+person_name = sys.argv[1]  # Read from command-line argument
 
-dataset_path = "dataset"
+# ✅ Use absolute path for the dataset folder
+script_dir = os.path.dirname(os.path.abspath(__file__))  # Get script directory
+dataset_path = os.path.join(script_dir, "dataset")  # Ensure absolute path
 person_folder = os.path.join(dataset_path, person_name)
+
+# ✅ Create directories if they don't exist
 os.makedirs(person_folder, exist_ok=True)
 
+# ✅ Initialize face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Open webcam
 time.sleep(2)
 
 if not cap.isOpened():
@@ -39,11 +43,15 @@ while count < max_images:
     for (x, y, w, h) in faces:
         cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         face_crop = gray[y:y + h, x:x + w]
+
         if face_crop.size > 0:
             image_path = os.path.join(person_folder, f"{count}.jpg")
+            
+            # ✅ Debugging: Print image storage path
+            print(f"✅ Saving image {count + 1} to: {image_path}")
+
             cv2.imwrite(image_path, face_crop)
             count += 1
-            print(f"✅ Image {count} saved: {image_path}")
 
         if count >= max_images:
             break
