@@ -5,18 +5,33 @@ import os
 
 app = Flask(__name__)
 
+dataset_path = "dataset"
+os.makedirs(dataset_path, exist_ok=True)
+
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
     data = request.json
     person_name = data.get("name")
+    image_data = data.get("image")  # Base64 encoded image
 
-    if not person_name:
-        return jsonify({"error": "Name is required"}), 400
+    if not person_name or not image_data:
+        return jsonify({"error": "Name and image are required"}), 400
 
-    subprocess.Popen(["python", "capture_faces.py", person_name])
+    # ✅ Send the Base64 image to capture_faces.py
+    process = subprocess.Popen(
+        ["python", "capture_faces.py", person_name],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    
+    stdout, stderr = process.communicate(input=image_data)
 
-    return jsonify({"message": f"Capturing started for {person_name}"}), 202
+    if stderr:
+        return jsonify({"error": stderr.strip()}), 500
 
+    return jsonify({"message": stdout.strip()}), 200
 
 @app.route("/recognize_faces", methods=["POST"])
 def recognize_faces():
