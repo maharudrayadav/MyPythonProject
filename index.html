@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Face Detection & Recognition</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        button { margin: 10px; padding: 10px 20px; font-size: 16px; }
+    </style>
+</head>
+<body>
+    <h1>Face Detection & Recognition</h1>
+    <button onclick="captureFaces()">Face Detection</button>
+    <button onclick="recognizeFaces()">Face Recognition</button>
+
+    <script>
+        function captureFaces() {
+            fetch("http://127.0.0.1:5000/capture_faces")
+                .then(response => response.text())
+                .then(data => alert(data))
+                .catch(error => console.error("Error:", error));
+        }
+
+        function recognizeFaces() {
+            fetch("http://127.0.0.1:5000/recognize_faces")
+                .then(response => response.text())
+                .then(data => alert(data))
+                .catch(error => console.error("Error:", error));
+        }
+    </script>
+</body>
+</html>
