@@ -8,30 +8,41 @@ app = Flask(__name__)
 dataset_path = "dataset"
 os.makedirs(dataset_path, exist_ok=True)
 
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
     data = request.json
     person_name = data.get("name")
-    image_data = data.get("image")  # Base64 encoded image
+    image_data = data.get("image")
 
     if not person_name or not image_data:
         return jsonify({"error": "Name and image are required"}), 400
 
-    # ✅ Send the Base64 image to capture_faces.py
-    process = subprocess.Popen(
-        ["python", "capture_faces.py", person_name],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    
-    stdout, stderr = process.communicate(input=image_data)
+    try:
+        image_bytes = base64.b64decode(image_data.split(",")[1])
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    if stderr:
-        return jsonify({"error": stderr.strip()}), 500
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-    return jsonify({"message": stdout.strip()}), 200
+        person_folder = os.path.join(dataset_path, person_name)
+        os.makedirs(person_folder, exist_ok=True)
+
+        count = len(os.listdir(person_folder))
+
+        for (x, y, w, h) in faces:
+            face_crop = gray[y:y + h, x:x + w]
+            if face_crop.size > 0:
+                image_path = os.path.join(person_folder, f"{count}.jpg")
+                cv2.imwrite(image_path, face_crop)
+                count += 1
+
+        return jsonify({"message": f"{count} face(s) saved for {person_name}"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/recognize_faces", methods=["POST"])
 def recognize_faces():
