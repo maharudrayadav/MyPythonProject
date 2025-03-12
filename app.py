@@ -8,7 +8,6 @@ app = Flask(__name__)
 dataset_path = "dataset"
 os.makedirs(dataset_path, exist_ok=True)
 
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
