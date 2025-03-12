@@ -6,34 +6,30 @@ import os
 
 app = Flask(__name__)
 
-dataset_path = "dataset"
-os.makedirs(dataset_path, exist_ok=True)
-
-
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
-    person_name = request.form.get("name")
-    image_file = request.files.get("image")  # Receive image file
+    if "image" not in request.files:
+        return jsonify({"error": "No image file provided"}), 400
 
-    if not person_name or not image_file:
-        return jsonify({"error": "Name and image file are required"}), 400
+    image_file = request.files["image"]
+    
+    try:
+        image = Image.open(image_file)  # Open image
+        image = image.convert("RGB")  # Convert to RGB (if needed)
+        
+        # Convert image to NumPy array
+        image_np = np.array(image)
+        
+        # Convert to grayscale
+        gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
+        
+        # Save grayscale image (for debugging)
+        cv2.imwrite("gray_image.jpg", gray)
 
-    image = Image.open(image_file)  # Open image
-    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
+        return jsonify({"message": "Image processed successfully"}), 200
 
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
-    person_folder = os.path.join(dataset_path, person_name)
-    os.makedirs(person_folder, exist_ok=True)
-
-    count = len(os.listdir(person_folder))
-    for (x, y, w, h) in faces:
-        face_crop = gray[y:y + h, x:x + w]
-        if face_crop.size > 0:
-            image_path = os.path.join(person_folder, f"{count}.jpg")
-            cv2.imwrite(image_path, face_crop)
-            count += 1
-
-    return jsonify({"message": f"{count} face(s) saved for {person_name}"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/recognize_faces", methods=["POST"])
 def recognize_faces():
