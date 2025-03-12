@@ -11,37 +11,28 @@ os.makedirs(dataset_path, exist_ok=True)
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
-    data = request.json
-    person_name = data.get("name")
-    image_data = data.get("image")
+    person_name = request.form.get("name")
+    image_file = request.files.get("image")  # Receive image file
 
-    if not person_name or not image_data:
-        return jsonify({"error": "Name and image are required"}), 400
+    if not person_name or not image_file:
+        return jsonify({"error": "Name and image file are required"}), 400
 
-    try:
-        image_bytes = base64.b64decode(image_data.split(",")[1])
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    image = Image.open(image_file)  # Open image
+    gray = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2GRAY)
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+    person_folder = os.path.join(dataset_path, person_name)
+    os.makedirs(person_folder, exist_ok=True)
 
-        person_folder = os.path.join(dataset_path, person_name)
-        os.makedirs(person_folder, exist_ok=True)
+    count = len(os.listdir(person_folder))
+    for (x, y, w, h) in faces:
+        face_crop = gray[y:y + h, x:x + w]
+        if face_crop.size > 0:
+            image_path = os.path.join(person_folder, f"{count}.jpg")
+            cv2.imwrite(image_path, face_crop)
+            count += 1
 
-        count = len(os.listdir(person_folder))
-
-        for (x, y, w, h) in faces:
-            face_crop = gray[y:y + h, x:x + w]
-            if face_crop.size > 0:
-                image_path = os.path.join(person_folder, f"{count}.jpg")
-                cv2.imwrite(image_path, face_crop)
-                count += 1
-
-        return jsonify({"message": f"{count} face(s) saved for {person_name}"}), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"message": f"{count} face(s) saved for {person_name}"}), 200
 
 @app.route("/recognize_faces", methods=["POST"])
 def recognize_faces():
