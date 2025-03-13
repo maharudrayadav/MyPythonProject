@@ -7,5 +7,4 @@ paramiko
 flask-cors
 python-dotenv
 face-recognition
-cmake
 gunicorn
