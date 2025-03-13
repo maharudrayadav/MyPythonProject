@@ -16,7 +16,7 @@ def capture_faces_endpoint():
         return jsonify({"error": "Name is required"}), 400
 
     person_name = data["name"]
-    capture_faces.capture_faces_function(person_name)  # ✅ Run inside Flask process
+    capture_faces_function(person_name)  # ✅ Run function inside Flask process
     return jsonify({"message": f"Capturing started for {person_name}"}), 202
 
 @app.route("/recognize_faces", methods=["POST"])
