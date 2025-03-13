@@ -5,10 +5,8 @@ numpy
 Pillow
 paramiko
 flask-cors
-flask
-paramiko
 python-dotenv
 dlib==19.24.2
 face-recognition
 cmake
-
+gunicorn
