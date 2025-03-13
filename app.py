@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify
 from train_model import train_model
 from flask_cors import CORS
 
-CORS(app) 
+
 # ✅ Load environment variables
 load_dotenv()
 
@@ -19,7 +19,7 @@ SFTP_REMOTE_PATH = "dataset/"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = Flask(__name__)
-
+CORS(app) 
 def upload_to_sftp(local_path, remote_filename, user_name):
     """Uploads image to SFTP in a user-specific folder."""
     try:
