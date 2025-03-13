@@ -17,15 +17,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 app = Flask(__name__)
 
-def upload_to_sftp(local_path, remote_filename, user_name):
-    """Uploads image to SFTP in a user-specific folder."""
+def upload_to_sftp(sftp, local_path, remote_filename, user_name):
+    """Uploads image to SFTP using an existing connection."""
     try:
-        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
-        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
-        sftp = paramiko.SFTPClient.from_transport(transport)
+        user_sftp_path = f"{SFTP_REMOTE_PATH}{user_name}"  # Fix path issue
 
-        user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
-        
         # ✅ Ensure user directory exists
         try:
             sftp.chdir(user_sftp_path)
@@ -35,19 +31,17 @@ def upload_to_sftp(local_path, remote_filename, user_name):
 
         remote_path = f"{user_sftp_path}/{remote_filename}"
         sftp.put(local_path, remote_path)
-
-        sftp.close()
-        transport.close()
         logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
         return {"status": "success", "remote_path": remote_path}
-    
+
     except Exception as e:
         logging.error(f"❌ SFTP Upload Error: {str(e)}")
         return {"status": "error", "message": str(e)}
 
+
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
-    """Handles image uploads, stores 10 images per user, and uploads to SFTP."""
+    """Handles image uploads, stores 10 images per user, and uploads to SFTP in one session."""
     if "image" not in request.files or "name" not in request.form:
         return jsonify({"error": "Missing file or name"}), 400
 
@@ -63,7 +57,7 @@ def capture_faces():
 
     # ✅ Count existing images to ensure only 10 are stored
     existing_images = sorted([f for f in os.listdir(user_folder) if f.endswith(".jpg")])
-    
+
     if len(existing_images) >= 10:
         oldest_image = os.path.join(user_folder, existing_images[0])
         os.remove(oldest_image)  # ✅ Remove the oldest image
@@ -73,17 +67,32 @@ def capture_faces():
     new_image_index = len(existing_images) + 1
     image_filename = f"{user_name}_{new_image_index}.jpg"
     image_path = os.path.join(user_folder, image_filename)
-    
+
     # ✅ Save Image Locally
     file.save(image_path)
 
-    # ✅ Upload to SFTP
-    upload_result = upload_to_sftp(image_path, image_filename, user_name)
+    # ✅ Open SFTP Connection Once
+    try:
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+
+        # ✅ Upload to SFTP (Pass Open Connection)
+        upload_result = upload_to_sftp(sftp, image_path, image_filename, user_name)
+
+        # ✅ Close SFTP Connection (Only After Upload)
+        sftp.close()
+        transport.close()
+
+    except Exception as e:
+        logging.error(f"❌ SFTP Connection Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
     return jsonify({
         "message": f"Image {new_image_index}/10 captured successfully",
         "sftp_result": upload_result
     }), 200
+
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
