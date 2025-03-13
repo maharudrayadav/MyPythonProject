@@ -57,4 +57,43 @@ while count < max_images:
 
 cap.release()
 cv2.destroyAllWindows()
-print(f"📁 {count
+
+print(f"📁 {count} images saved. Uploading to SFTP...")
+
+# 🔹 SFTP Configuration
+SFTP_HOST = "eu-west-1.sftpcloud.io"
+SFTP_PORT = 22  # Default SFTP port
+SFTP_USERNAME = "e714326d13144486afc9979353b4cdb6"
+SFTP_PASSWORD = "t4NFOoIuhUqY8866CrMEeMdlOb7wM42N"
+REMOTE_PATH = "dataset"  # Change this to your remote directory
+
+try:
+    transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+    transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
+
+    sftp = paramiko.SFTPClient.from_transport(transport)
+
+    # Ensure the remote directory exists
+    try:
+        sftp.chdir(REMOTE_PATH)
+    except IOError:
+        sftp.mkdir(REMOTE_PATH)
+        sftp.chdir(REMOTE_PATH)
+
+    person_remote_folder = f"{REMOTE_PATH}/{person_name}"
+    try:
+        sftp.chdir(person_remote_folder)
+    except IOError:
+        sftp.mkdir(person_remote_folder)
+
+    for img in captured_images:
+        remote_file_path = f"{person_remote_folder}/{os.path.basename(img)}"
+        sftp.put(img, remote_file_path)
+        print(f"✅ Uploaded: {remote_file_path}")
+
+    sftp.close()
+    transport.close()
+    print("✅ All images uploaded successfully!")
+
+except Exception as e:
+    print(f"❌ SFTP Upload Error: {e}")
