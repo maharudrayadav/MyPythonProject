@@ -10,28 +10,17 @@ app = Flask(__name__)
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
-    if "image" not in request.files:
-        return jsonify({"error": "No image file provided"}), 400
+    data = request.get_json()
 
-    image_file = request.files["image"]
-    
-    try:
-        image = Image.open(image_file)  # Open image
-        image = image.convert("RGB")  # Convert to RGB (if needed)
-        
-        # Convert image to NumPy array
-        image_np = np.array(image)
-        
-        # Convert to grayscale
-        gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
-        
-        # Save grayscale image (for debugging)
-        cv2.imwrite("gray_image.jpg", gray)
+    if not data or "name" not in data:
+        return jsonify({"error": "Name is required"}), 400
 
-        return jsonify({"message": "Image processed successfully"}), 200
+    person_name = data["name"]
 
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    # ✅ Start the capture script in a separate process
+    subprocess.Popen(["python", "capture_faces.py", person_name])
+
+    return jsonify({"message": f"Capturing started for {person_name}"}), 202
 
 @app.route("/recognize_faces", methods=["POST"])
 def recognize_faces():
