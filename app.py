@@ -5,6 +5,7 @@ import os
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import capture_faces  # ✅ Import capture_faces.py directly
+from capture_faces import capture_faces_function
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": ["https://cloud-app-dlme.onrender.com", "http://localhost:3000"]}})
