@@ -2,11 +2,13 @@ import json
 from flask import Flask, jsonify, request
 from PIL import Image
 import subprocess
+from flask_cors import CORS
 import os
 import numpy as np
 
 
 app = Flask(__name__)
+CORS(app, origins=["https://cloud-app-dlme.onrender.com"])
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
