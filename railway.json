@@ -1,7 +1,7 @@
 {
   "build": {
     "nixpacks": {
-      "pkgs": ["python311", "gcc", "cmake"]
+      "pkgs": ["python311", "gcc", "cmake", "make"]
     }
   },
   "deploy": {
