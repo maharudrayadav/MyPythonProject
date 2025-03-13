@@ -17,7 +17,7 @@ face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detectio
 
 def download_model(username: str):
     """Downloads the LBPH model from SFTP."""
-    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
+    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"  # Updated filename
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
     try:
@@ -33,14 +33,14 @@ def download_model(username: str):
             sftp.stat(model_remote_path)  # Check if file exists
             sftp.get(model_remote_path, local_model_path)
             print(f"✅ Downloaded: {local_model_path}")  # Debugging
-            sftp.close()
-            transport.close()
             return local_model_path
         except FileNotFoundError:
             print(f"❌ Model file not found: {model_remote_path}")  # Debugging
-            sftp.close()
-            transport.close()
             return None
+        finally:
+            sftp.close()
+            transport.close()  # Ensure this is always closed
+            print("🔒 SFTP connection closed")
 
     except Exception as e:
         print(f"⚠️ SFTP Error: {e}")
