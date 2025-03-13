@@ -8,8 +8,7 @@ flask-cors
 flask
 paramiko
 python-dotenv
-cmake
-dlib-bin
+dlib==19.24.2
 face-recognition
 
 
