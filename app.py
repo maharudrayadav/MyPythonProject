@@ -102,6 +102,11 @@ def train():
 
     return jsonify(result), 200
 
+@app.get("/recognize/{username}")
+def recognize_user(username: str):
+    """API endpoint to recognize a user based on their LBPH model."""
+    return recognize_face(username)
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     logging.info(f"🚀 Starting server on port {port}") 
