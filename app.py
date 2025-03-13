@@ -85,6 +85,30 @@ def capture_faces():
         "sftp_result": upload_result
     }), 200
 
+
+@app.route("/train_model", methods=["POST"])
+def train_model_endpoint():
+    """API endpoint to train the LBPH model for a specific user."""
+    data = request.json
+    user_name = data.get("username")
+
+    if not user_name:
+        return jsonify({"error": "Username is required"}), 400
+
+    # ✅ Train the model for the user
+    train_result = train_model(user_name)
+
+    if train_result["status"] == "error":
+        return jsonify(train_result), 400
+
+    # ✅ Upload to SFTP
+    upload_result = upload_to_sftp(train_result["model_path"], train_result["model_path"], user_name)
+
+    return jsonify({
+        "message": f"Model trained successfully for {user_name}",
+        "sftp_result": upload_result
+    }), 200
+
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     logging.info(f"🚀 Starting server on port {port}") 
