@@ -1,1 +1,11 @@
+{
+  "build": {
+    "nixpacks": {
+      "pkgs": ["python311", "gcc", "cmake"]
+    }
+  },
+  "deploy": {
+    "startCommand": "gunicorn --bind 0.0.0.0:$PORT recognize_faces:app"
+  }
+}
 
