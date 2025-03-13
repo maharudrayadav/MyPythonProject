@@ -5,8 +5,6 @@ Pillow
 paramiko
 flask-cors
 python-dotenv
-face-recognition
-cmake
-gunicorn
+insightface
 fastapi
 pydantic
