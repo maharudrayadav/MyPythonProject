@@ -9,4 +9,5 @@ insightface
 fastapi
 pydantic
 gunicorn
+mediapipe
 
