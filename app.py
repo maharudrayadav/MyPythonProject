@@ -12,7 +12,7 @@ SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_PORT = 22  # Default SFTP Port
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "/remote/path/dataset"
+SFTP_REMOTE_PATH = "dataset/"
 
 # ✅ Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
