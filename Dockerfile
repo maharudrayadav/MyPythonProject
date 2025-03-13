@@ -1,31 +1,18 @@
-# Use official Python image
-FROM python:3.11-slim
+FROM python:3.11
 
-# Install required system libraries
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libxext6 \
-    libsm6 \
-    libxrender1 \
-    build-essential \
-    cmake \
+    libsm6 libxext6 libgl1-mesa-glx libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY . .
-
-# Upgrade pip before installing dependencies
-RUN pip install --upgrade pip
-
-# Install Python dependencies
+# Copy and install dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port
-EXPOSE 5000
+# Copy the app files
+COPY . .
 
-# Run Flask app using gunicorn
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]
+# Start the FastAPI app using Uvicorn
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
