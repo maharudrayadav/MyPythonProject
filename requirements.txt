@@ -6,7 +6,7 @@ Pillow
 paramiko
 flask-cors
 python-dotenv
-pip install dlib==19.18.0
+dlib==19.18.0
 face-recognition
 cmake
 gunicorn
