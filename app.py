@@ -3,7 +3,6 @@ from flask import Flask, jsonify, request
 from PIL import Image
 import subprocess
 from flask_cors import CORS
-import os
 import numpy as np
 
 
@@ -76,7 +75,3 @@ def train_model():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))  # Render assigns a dynamic port
-    app.run(host="0.0.0.0", port=port, debug=True)
