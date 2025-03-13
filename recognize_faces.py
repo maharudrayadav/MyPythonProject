@@ -1,69 +1,80 @@
-import cv2
 import os
+import cv2
 import numpy as np
-import json
-import sys
-import time
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import paramiko
+import mediapipe as mp
+from fastapi import HTTPException, UploadFile
 
-app = FastAPI()
+# SFTP Configuration
+SFTP_HOST = "your.sftp.server.com"
+SFTP_PORT = 22
+SFTP_USERNAME = "your_username"
+SFTP_PASSWORD = "your_password"
+MODEL_PATH = "/model/{username}/face_embedding_{username}.npy"  # Path on SFTP server
+LOCAL_MODEL_DIR = "temp_models/"  # Store models locally
 
-# Load Haar Cascade for face detection
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+# Load Mediapipe Face Detection
+mp_face_detection = mp.solutions.face_detection
+face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
 
-@app.get("/recognize/{username}")
-def recognize_face(username: str):
-    """Recognizes a face using LBPH model stored in /model/{username}/"""
-    
-    # Define user-specific model path
-    model_path = f"model/{username}/lbph_model_{username}.xml"
-    
-    if not os.path.exists(model_path):
-        raise HTTPException(status_code=404, detail=f"Trained model not found for user: {username}")
-
-    # Load LBPH Face Recognizer
-    face_recognizer = cv2.face.LBPHFaceRecognizer_create()
-    face_recognizer.read(model_path)
-
-    # Open webcam
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        raise HTTPException(status_code=500, detail="Could not open webcam")
-
-    print(f"📂 Model loaded from: {model_path}")
-    print("🔍 Opening camera...")
-
-    start_time = time.time()
-    timeout = 5  # Run for 5 seconds
-    recognized_faces = []
+def download_model(username: str):
+    """Downloads the face embeddings model from SFTP if it exists."""
+    model_remote_path = MODEL_PATH.format(username=username)
+    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
 
     try:
-        while time.time() - start_time < timeout:
-            ret, frame = cap.read()
-            if not ret:
-                raise HTTPException(status_code=500, detail="Failed to capture frame")
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
+        sftp = paramiko.SFTPClient.from_transport(transport)
 
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+        os.makedirs(LOCAL_MODEL_DIR, exist_ok=True)  # Ensure local directory exists
 
-            for (x, y, w, h) in faces:
-                face_crop = gray[y:y + h, x:x + w]
+        try:
+            sftp.stat(model_remote_path)  # Check if file exists
+            sftp.get(model_remote_path, local_model_path)  # Download file
+            sftp.close()
+            transport.close()
+            return local_model_path
+        except FileNotFoundError:
+            sftp.close()
+            transport.close()
+            raise HTTPException(status_code=404, detail=f"Face embeddings not found on SFTP for user: {username}")
 
-                try:
-                    label, confidence = face_recognizer.predict(face_crop)
-                    if confidence < 50:  # Lower confidence means better match
-                        recognized_faces.append({"name": f"{username}", "confidence": round(confidence, 2)})
-                        cap.release()
-                        cv2.destroyAllWindows()
-                        return {"recognized_faces": recognized_faces}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"SFTP Connection Error: {str(e)}")
 
-                except Exception as e:
-                    return {"error": f"Prediction error: {str(e)}"}
+async def recognize_face(username: str, file: UploadFile):
+    """Receives an image, detects the face, and compares it with stored embeddings."""
+    
+    model_path = download_model(username)
+    stored_embeddings = np.load(model_path)
 
-        return {"message": "No faces recognized"}
+    # Read image from frontend
+    contents = await file.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-    finally:
-        if cap.isOpened():
-            cap.release()
-        cv2.destroyAllWindows()
+    if img is None:
+        raise HTTPException(status_code=400, detail="Invalid image file")
+
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    results = face_detection.process(img_rgb)
+
+    if not results.detections:
+        return {"message": "No faces detected"}
+
+    recognized_faces = []
+    for detection in results.detections:
+        bbox = detection.location_data.relative_bounding_box
+        h, w, _ = img.shape
+        x, y, width, height = int(bbox.xmin * w), int(bbox.ymin * h), int(bbox.width * w), int(bbox.height * h)
+        face_crop = img_rgb[y:y + height, x:x + width]
+
+        face_embedding = np.mean(face_crop, axis=(0, 1))  # Simple feature extraction
+
+        distance = np.linalg.norm(stored_embeddings - face_embedding)
+        if distance < 10.0:  # Recognition threshold
+            recognized_faces.append({"name": username, "confidence": round(100 - distance, 2)})
+
+    return {"recognized_faces": recognized_faces if recognized_faces else "Face not recognized"}
