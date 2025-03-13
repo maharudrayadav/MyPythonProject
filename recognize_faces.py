@@ -4,102 +4,66 @@ import numpy as np
 import json
 import sys
 import time
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
-# Define model path
-model_path = os.path.abspath("lbph_model.xml")  # Get absolute path
-
-# Load LBPH Face Recognizer
-face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+app = FastAPI()
 
 # Load Haar Cascade for face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
-# Check if model file exists
-if not os.path.exists(model_path):
-    print(json.dumps({"error": f"Trained model not found at {model_path}"}))
-    sys.exit(1)
+@app.get("/recognize/{username}")
+def recognize_face(username: str):
+    """Recognizes a face using LBPH model stored in /model/{username}/"""
+    
+    # Define user-specific model path
+    model_path = f"model/{username}/lbph_model_{username}.xml"
+    
+    if not os.path.exists(model_path):
+        raise HTTPException(status_code=404, detail=f"Trained model not found for user: {username}")
 
-# Load trained model
-face_recognizer.read(model_path)
+    # Load LBPH Face Recognizer
+    face_recognizer = cv2.face.LBPHFaceRecognizer_create()
+    face_recognizer.read(model_path)
 
-# Open webcam
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Use DirectShow
-if not cap.isOpened():
-    print(json.dumps({"error": "Could not open webcam"}))
-    sys.exit(1)
+    # Open webcam
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise HTTPException(status_code=500, detail="Could not open webcam")
 
-print(f"📂 Model loaded from: {model_path}")
-print("🔍 Opening camera...")
+    print(f"📂 Model loaded from: {model_path}")
+    print("🔍 Opening camera...")
 
-try:
-    # Ensure the first frame is captured before starting the timer
-    ret, frame = cap.read()
-    if not ret:
-        raise Exception("Failed to capture first frame")
-
-    cv2.imshow("Face Recognition", frame)  # Show the first frame
-    cv2.waitKey(500)  # Short delay to display the frame
-
-    start_time = time.time()  # Start timing after the first frame
+    start_time = time.time()
     timeout = 5  # Run for 5 seconds
     recognized_faces = []
 
-    print(f"⏳ Recognizing faces for {timeout} seconds...")
+    try:
+        while time.time() - start_time < timeout:
+            ret, frame = cap.read()
+            if not ret:
+                raise HTTPException(status_code=500, detail="Failed to capture frame")
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            raise Exception("Failed to capture frame")
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+            for (x, y, w, h) in faces:
+                face_crop = gray[y:y + h, x:x + w]
 
-        for (x, y, w, h) in faces:
-            face_crop = gray[y:y + h, x:x + w]
+                try:
+                    label, confidence = face_recognizer.predict(face_crop)
+                    if confidence < 50:  # Lower confidence means better match
+                        recognized_faces.append({"name": f"{username}", "confidence": round(confidence, 2)})
+                        cap.release()
+                        cv2.destroyAllWindows()
+                        return {"recognized_faces": recognized_faces}
 
-            try:
-                label, confidence = face_recognizer.predict(face_crop)
-                if confidence < 50:  # Lower confidence means better match
-                    recognized_faces.append({"name": f"Person_{label}", "confidence": round(confidence, 2)})
-                    print(f"✅ Recognized: Person_{label} (Confidence: {confidence:.2f})")
+                except Exception as e:
+                    return {"error": f"Prediction error: {str(e)}"}
 
-                    # **IMMEDIATE STOP**
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    print(json.dumps({"recognized_faces": recognized_faces}))
-                    sys.exit(0)
+        return {"message": "No faces recognized"}
 
-            except Exception as e:
-                print(json.dumps({"error": f"Prediction error: {str(e)}"}))
-
-        # Draw rectangle around detected faces
-        for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-        # Display the frame
-        cv2.imshow("Face Recognition", frame)
-
-        # Stop after timeout
-        if time.time() - start_time > timeout:
-            break
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-except Exception as e:
-    print(json.dumps({"error": str(e)}))
-
-
-
-finally:
-    # **Forcefully release the camera**
-    if cap.isOpened():
-        cap.release()
-    cv2.destroyAllWindows()
-
-# If no faces were recognized
-if not recognized_faces:
-    recognized_faces.append({"message": "No faces recognized"})
-
-# Return result as JSON
-print(json.dumps({"recognized_faces": recognized_faces}))
+    finally:
+        if cap.isOpened():
+            cap.release()
+        cv2.destroyAllWindows()
