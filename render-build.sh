@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Install system dependencies
+# Install required system dependencies for dlib
 apt-get update && apt-get install -y \
     build-essential \
     cmake \
