@@ -17,7 +17,7 @@ face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detectio
 
 def download_model(username: str):
     """Downloads face embeddings from SFTP."""
-    model_remote_path = SFTP_REMOTE_PATH.format(username=username)
+    model_remote_path = f"/model/{username}/face_embedding_{username}.npy"  # Full path
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
 
     try:
@@ -27,15 +27,17 @@ def download_model(username: str):
 
         os.makedirs(LOCAL_MODEL_DIR, exist_ok=True)
 
+        print(f"🔎 Checking file: {model_remote_path}")  # Debugging
+
         try:
             sftp.stat(model_remote_path)  # Check if file exists
             sftp.get(model_remote_path, local_model_path)
-            print(f"✅ Downloaded model: {local_model_path}")  # Debugging
+            print(f"✅ Downloaded: {local_model_path}")  # Debugging
             sftp.close()
             transport.close()
             return local_model_path
         except FileNotFoundError:
-            print(f"❌ Model file not found for {username}")
+            print(f"❌ Model file not found: {model_remote_path}")  # Debugging
             sftp.close()
             transport.close()
             return None
@@ -43,6 +45,7 @@ def download_model(username: str):
     except Exception as e:
         print(f"⚠️ SFTP Error: {e}")
         return None
+
 
 def recognize_face(username: str, file):
     """Receives an image, detects the face, and compares it with stored embeddings."""
