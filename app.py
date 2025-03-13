@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from train_model import train_model
 from flask_cors import CORS
-from face_recognition import recognize_face
+from recognize_faces import recognize_face
+
 
 
 
