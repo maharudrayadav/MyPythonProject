@@ -16,48 +16,54 @@ SFTP_REMOTE_PATH = "dataset/"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-def upload_to_sftp(local_path, remote_filename, user_name):
-    """Uploads file to SFTP in the user's folder."""
+def download_from_sftp(user_name, local_dataset_path):
+    """Downloads user images from SFTP to local storage."""
     try:
         transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
-        user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
+        user_sftp_path = f"{SFTP_REMOTE_PATH}{user_name}/dataset/{user_name}"
         
-        # ✅ Ensure user directory exists
         try:
             sftp.chdir(user_sftp_path)
         except IOError:
-            sftp.mkdir(user_sftp_path)
-            sftp.chdir(user_sftp_path)
+            logging.error(f"❌ Error: User dataset not found at {user_sftp_path}")
+            sftp.close()
+            transport.close()
+            return False
 
-        remote_path = f"{user_sftp_path}/{remote_filename}"
-        sftp.put(local_path, remote_path)
+        if not os.path.exists(local_dataset_path):
+            os.makedirs(local_dataset_path)
+
+        for file in sftp.listdir():
+            remote_file_path = f"{user_sftp_path}/{file}"
+            local_file_path = os.path.join(local_dataset_path, file)
+            sftp.get(remote_file_path, local_file_path)
 
         sftp.close()
         transport.close()
-        logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
-        return {"status": "success", "remote_path": remote_path}
+        logging.info(f"✅ Downloaded dataset for {user_name} to {local_dataset_path}")
+        return True
 
     except Exception as e:
-        logging.error(f"❌ SFTP Upload Error: {str(e)}")
-        return {"status": "error", "message": str(e)}
+        logging.error(f"❌ SFTP Download Error: {str(e)}")
+        return False
 
 def train_model(user_name):
     """Trains the LBPH model for a specific user."""
-    dataset_path = f"dataset/{user_name}/dataset/{user_name}"
-    model_filename = f"lbph_model_{user_name}.xml"
-
-    if not os.path.exists(dataset_path):
-        logging.error(f"❌ Error: User dataset not found at {dataset_path}")
+    local_dataset_path = f"dataset/{user_name}/dataset/{user_name}"
+    
+    # ✅ Step 1: Download dataset from SFTP
+    if not download_from_sftp(user_name, local_dataset_path):
         return {"status": "error", "message": f"Dataset not found for user {user_name}"}
 
+    model_filename = f"lbph_model_{user_name}.xml"
     LBPH_model = cv2.face.LBPHFaceRecognizer_create()
     images, labels = [], []
 
-    for image_name in os.listdir(dataset_path):
-        image_path = os.path.join(dataset_path, image_name)
+    for image_name in os.listdir(local_dataset_path):
+        image_path = os.path.join(local_dataset_path, image_name)
         img = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
         if img is None:
             continue
@@ -65,8 +71,8 @@ def train_model(user_name):
         labels.append(0)  # Since it's for one user, use label `0`
 
     if len(images) == 0:
-        logging.error(f"❌ Error: No images found for user {user_name}.")
-        return {"status": "error", "message": "No images found for training."}
+        logging.error(f"❌ Error: No valid images found for user {user_name}.")
+        return {"status": "error", "message": "No valid images found for training."}
 
     LBPH_model.train(images, np.array(labels))
     LBPH_model.save(model_filename)
