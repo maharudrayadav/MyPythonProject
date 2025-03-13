@@ -11,31 +11,21 @@ SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_PORT = 22
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "dataset"  # ✅ Ensure no trailing slash
+SFTP_REMOTE_PATH = "dataset/"
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = Flask(__name__)
 
-# ✅ Establish SFTP Connection Once
-sftp_client = None
-
-def get_sftp_client():
-    """Creates and returns a persistent SFTP client."""
-    global sftp_client
-    if sftp_client is None:
-        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
-        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
-        sftp_client = paramiko.SFTPClient.from_transport(transport)
-    return sftp_client
-
 def upload_to_sftp(local_path, remote_filename, user_name):
     """Uploads image to SFTP in a user-specific folder."""
     try:
-        sftp = get_sftp_client()
-        user_name = user_name.lower()  # ✅ Store all usernames in lowercase
-        user_sftp_path = os.path.join(SFTP_REMOTE_PATH, user_name)  # ✅ Corrected path
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
+        sftp = paramiko.SFTPClient.from_transport(transport)
 
+        user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
+        
         # ✅ Ensure user directory exists
         try:
             sftp.chdir(user_sftp_path)
@@ -43,12 +33,14 @@ def upload_to_sftp(local_path, remote_filename, user_name):
             sftp.mkdir(user_sftp_path)
             sftp.chdir(user_sftp_path)
 
-        remote_path = os.path.join(user_sftp_path, remote_filename)
+        remote_path = f"{user_sftp_path}/{remote_filename}"
         sftp.put(local_path, remote_path)
 
+        sftp.close()
+        transport.close()
         logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
         return {"status": "success", "remote_path": remote_path}
-
+    
     except Exception as e:
         logging.error(f"❌ SFTP Upload Error: {str(e)}")
         return {"status": "error", "message": str(e)}
@@ -60,7 +52,7 @@ def capture_faces():
         return jsonify({"error": "Missing file or name"}), 400
 
     file = request.files["image"]
-    user_name = request.form["name"].strip().lower()  # ✅ Convert username to lowercase
+    user_name = request.form["name"].strip()
 
     if file.filename == "":
         return jsonify({"error": "No selected file"}), 400
