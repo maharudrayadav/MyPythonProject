@@ -102,10 +102,17 @@ def train():
 
     return jsonify(result), 200
 
-@app.get("/recognize/{username}")
-def recognize_user(username: str):
-    """API endpoint to recognize a user based on their LBPH model."""
-    return recognize_face(username)
+@app.route("/recognize", methods=["POST"])
+def recognize():
+    """Endpoint to start face recognition."""
+    data = request.json
+    username = data.get("username")
+
+    if not username:
+        return jsonify({"error": "Username is required"}), 400
+
+    result = recognize_face(username)
+    return jsonify(result)
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
