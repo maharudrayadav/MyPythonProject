@@ -25,9 +25,9 @@ if not cap.isOpened():
 
 count = 0
 max_images = 10
-print(f"📸 Capturing face images for {person_name}...")
-
 captured_images = []
+
+print(f"📸 Capturing {max_images} face images for {person_name}...")
 
 while count < max_images:
     ret, frame = cap.read()
@@ -39,16 +39,15 @@ while count < max_images:
     faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
     for (x, y, w, h) in faces:
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
         face_crop = gray[y:y + h, x:x + w]
         if face_crop.size > 0:
-            image_path = os.path.join(person_folder, f"{count}.jpg")
+            image_path = os.path.join(person_folder, f"{count+1}.jpg")  # Start from 1
             cv2.imwrite(image_path, face_crop)
             captured_images.append(image_path)
             count += 1
             print(f"✅ Image {count} saved: {image_path}")
 
-        if count >= max_images:
+        if count >= max_images:  # ✅ Stop capturing after 10 images
             break
 
     cv2.imshow("Face Detection", frame)
@@ -60,27 +59,15 @@ cv2.destroyAllWindows()
 
 print(f"📁 {count} images saved. Uploading to SFTP...")
 
-# 🔹 SFTP Configuration
-SFTP_HOST = "eu-west-1.sftpcloud.io"
-SFTP_PORT = 22  # Default SFTP port
-SFTP_USERNAME = "e714326d13144486afc9979353b4cdb6"
-SFTP_PASSWORD = "t4NFOoIuhUqY8866CrMEeMdlOb7wM42N"
-REMOTE_PATH = "dataset"  # Change this to your remote directory
-
+# ✅ Upload captured images to SFTP
 try:
-    transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
-    transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
-
+    transport = paramiko.Transport(("eu-west-1.sftpcloud.io", 22))
+    transport.connect(username="e714326d13144486afc9979353b4cdb6", password="t4NFOoIuhUqY8866CrMEeMdlOb7wM42N")
     sftp = paramiko.SFTPClient.from_transport(transport)
 
-    # Ensure the remote directory exists
-    try:
-        sftp.chdir(REMOTE_PATH)
-    except IOError:
-        sftp.mkdir(REMOTE_PATH)
-        sftp.chdir(REMOTE_PATH)
-
-    person_remote_folder = f"{REMOTE_PATH}/{person_name}"
+    # ✅ Ensure the remote folder exists
+    sftp.chdir("dataset")
+    person_remote_folder = f"dataset/{person_name}"
     try:
         sftp.chdir(person_remote_folder)
     except IOError:
