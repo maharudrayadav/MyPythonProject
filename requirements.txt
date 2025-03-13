@@ -9,6 +9,7 @@ flask
 paramiko
 python-dotenv
 cmake
-dlib
-face_recognition
+dlib-bin
+face-recognition
+
 
