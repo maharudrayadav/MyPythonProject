@@ -5,4 +5,6 @@ numpy
 Pillow
 paramiko
 flask-cors
-
+flask
+paramiko
+python-dotenv
