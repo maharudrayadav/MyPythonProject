@@ -10,5 +10,5 @@ paramiko
 python-dotenv
 dlib==19.24.2
 face-recognition
-
+cmake
 
