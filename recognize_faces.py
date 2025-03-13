@@ -1,14 +1,14 @@
 import os
 import cv2
-import numpy as np
 import paramiko
+import numpy as np
 import mediapipe as mp
 
 # Load environment variables
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "model/{username}/face_embedding_{username}.npy"
+SFTP_REMOTE_PATH = "model/{username}/lbph_model_{username}.xml"
 LOCAL_MODEL_DIR = "temp_models/"
 
 # Initialize face detection
@@ -16,9 +16,9 @@ mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def download_model(username: str):
-    """Downloads face embeddings from SFTP."""
-    model_remote_path = f"/model/{username}/face_embedding_{username}.npy"  # Full path
-    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
+    """Downloads the LBPH model from SFTP."""
+    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
+    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
     try:
         transport = paramiko.Transport((SFTP_HOST, 22))
@@ -48,14 +48,15 @@ def download_model(username: str):
 
 
 def recognize_face(username: str, file):
-    """Receives an image, detects the face, and compares it with stored embeddings."""
+    """Receives an image, detects the face, and compares it with the stored LBPH model."""
     model_path = download_model(username)
 
     if not model_path:
-        return {"error": f"Face embeddings not found for {username}"}, 404
+        return {"error": f"Face model not found for {username}"}, 404
 
-    stored_embeddings = np.load(model_path)
-    print(f"🔍 Loaded embeddings shape: {stored_embeddings.shape}")  # Debugging
+    # Load LBPH model
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
+    recognizer.read(model_path)
 
     # Read uploaded image
     contents = file.read()
@@ -77,16 +78,16 @@ def recognize_face(username: str, file):
         bbox = detection.location_data.relative_bounding_box
         h, w, _ = img.shape
         x, y, width, height = int(bbox.xmin * w), int(bbox.ymin * h), int(bbox.width * w), int(bbox.height * h)
-        face_crop = img_rgb[y:y + height, x:x + width]
+        face_crop = img[y:y + height, x:x + width]
 
-        face_embedding = np.mean(face_crop, axis=(0, 1))  # Simple feature extraction
-        print(f"🧐 Extracted face embedding: {face_embedding}")  # Debugging
+        # Convert to grayscale for LBPH
+        face_gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
 
-        distance = np.linalg.norm(stored_embeddings - face_embedding)
-        print(f"📏 Distance calculated: {distance}")  # Debugging
+        # Predict using LBPH
+        label, confidence = recognizer.predict(face_gray)
+        print(f"🧐 Recognized Label: {label}, Confidence: {confidence}")  # Debugging
 
-        if distance < 10.0:  # Adjust threshold if needed
-            recognized_faces.append({"name": username, "confidence": round(100 - distance, 2)})
+        if confidence < 70:  # Lower confidence means better match
+            recognized_faces.append({"name": username, "confidence": round(100 - confidence, 2)})
 
     return {"recognized_faces": recognized_faces if recognized_faces else "Face not recognized"}
-
