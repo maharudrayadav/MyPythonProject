@@ -1,87 +1,76 @@
-import json
-import subprocess
-import sys
 import os
+import paramiko
 import logging
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-from capture_faces import capture_faces_function  # ✅ Import only required function
+from dotenv import load_dotenv
+from flask import Flask, request, jsonify
 
-# ✅ Set up logging for production
+# ✅ Load environment variables from .env file
+load_dotenv()
+
+# ✅ Secure SFTP Configuration
+SFTP_HOST = os.getenv("SFTP_HOST")
+SFTP_PORT = 22  # Default SFTP Port
+SFTP_USERNAME = os.getenv("SFTP_USERNAME")
+SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
+SFTP_REMOTE_PATH = "/remote/path/dataset"
+
+# ✅ Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": ["https://cloud-app-dlme.onrender.com", "http://localhost:3000"]}})
+
+def upload_to_sftp(local_path, remote_filename):
+    """Uploads an image to the SFTP server securely."""
+    try:
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+
+        # ✅ Ensure remote directory exists
+        try:
+            sftp.chdir(SFTP_REMOTE_PATH)
+        except IOError:
+            sftp.mkdir(SFTP_REMOTE_PATH)
+            sftp.chdir(SFTP_REMOTE_PATH)
+
+        remote_path = f"{SFTP_REMOTE_PATH}/{remote_filename}"
+        sftp.put(local_path, remote_path)
+        sftp.close()
+        transport.close()
+
+        logging.info(f"✅ Uploaded {remote_filename} to {SFTP_REMOTE_PATH}")
+        return {"status": "success", "remote_path": remote_path}
+
+    except Exception as e:
+        logging.error(f"❌ SFTP Upload Error: {str(e)}")
+        return {"status": "error", "message": str(e)}
 
 @app.route("/capture_faces", methods=["POST"])
-def capture_faces_endpoint():
-    """Receives a person's name and processes images."""
-    data = request.get_json()
-    if not data or "name" not in data:
-        logging.error("❌ Name is missing in request")
-        return jsonify({"error": "Name is required"}), 400
+def capture_faces():
+    """Handles image upload and sends it to the SFTP server."""
+    if "image" not in request.files or "name" not in request.form:
+        return jsonify({"error": "Missing file or name"}), 400
 
-    person_name = data["name"]
-    logging.info(f"📸 Capturing started for {person_name}")
+    file = request.files["image"]
+    user_name = request.form["name"]
 
-    # ✅ Ensure this function does not use cv2.VideoCapture(0)
-    try:
-        capture_faces_function(person_name)
-        return jsonify({"message": f"Capturing started for {person_name}"}), 202
-    except Exception as e:
-        logging.error(f"❌ Error processing {person_name}: {str(e)}")
-        return jsonify({"error": "Failed to process request"}), 500
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
 
-@app.route("/recognize_faces", methods=["POST"])
-def recognize_faces():
-    """Runs face recognition and returns results."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "recognize_faces.py"],  # ✅ Use sys.executable
-            capture_output=True,
-            text=True
-        )
+    # ✅ Save image locally
+    dataset_path = "dataset"
+    person_folder = os.path.join(dataset_path, user_name)
+    os.makedirs(person_folder, exist_ok=True)
 
-        if result.stderr:
-            logging.error(f"❌ Subprocess error: {result.stderr}")
+    image_path = os.path.join(person_folder, file.filename)
+    file.save(image_path)
 
-        if not result.stdout:
-            return jsonify({"error": "No output from subprocess"}), 500
+    # ✅ Upload to SFTP
+    upload_result = upload_to_sftp(image_path, file.filename)
 
-        # ✅ Parse JSON output safely
-        try:
-            json_output = json.loads(result.stdout.strip())
-            return jsonify(json_output)
-        except json.JSONDecodeError:
-            return jsonify({"error": "Invalid JSON output"}), 500
-
-    except Exception as e:
-        logging.error(f"❌ Exception in recognize_faces: {str(e)}")
-        return jsonify({"error": str(e)}), 500
-
-@app.route("/train_model", methods=["POST"])
-def train_model():
-    """Runs the training script for the model."""
-    try:
-        result = subprocess.run(
-            [sys.executable, "train_model.py"],  # ✅ Use sys.executable
-            capture_output=True,
-            text=True
-        )
-
-        if result.stderr:
-            logging.error(f"❌ Training error: {result.stderr}")
-
-        if not result.stdout:
-            return jsonify({"error": "No output from training process"}), 500
-
-        return jsonify({"message": "Model training completed successfully"}), 200
-
-    except Exception as e:
-        logging.error(f"❌ Exception in train_model: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    return jsonify({"message": "Image captured successfully", "sftp_result": upload_result}), 200
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # ✅ Use dynamic port for production
+    port = int(os.getenv("PORT", 5000))
     logging.info(f"🚀 Starting server on port {port}")
-    app.run(host="0.0.0.0", port=port, debug=False)  # ✅ Production mode
+    app.run(host="0.0.0.0", port=port, debug=False)
