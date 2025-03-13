@@ -109,18 +109,14 @@ def train():
 @app.route("/recognize", methods=["POST"])
 def recognize():
     """Endpoint to start face recognition."""
-    if "image" not in request.files or "username" not in request.form:
-        return jsonify({"error": "Missing file or username"}), 400
+    data = request.json
+    logging.info(f"Received data: {data}")
 
-    file = request.files["image"]
-    username = request.form["username"].strip()
+    if not data or "username" not in data:
+        logging.error("❌ Error: Username is missing")
+        return jsonify({"error": "Username is required"}), 400
 
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
-
-    # Pass the image file to recognize_face
-    result = recognize_face(username, file)
-    
+    result = recognize_face(data["username"])
     return jsonify(result)
 
 if __name__ == "__main__":
