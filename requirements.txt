@@ -8,3 +8,4 @@ flask-cors
 flask
 paramiko
 python-dotenv
+face_recognition
