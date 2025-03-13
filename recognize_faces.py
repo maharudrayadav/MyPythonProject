@@ -3,19 +3,20 @@ import cv2
 import numpy as np
 import paramiko
 import mediapipe as mp
-from flask import jsonify
 
+# Load environment variables
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
 SFTP_REMOTE_PATH = "model/{username}/face_embedding_{username}.npy"
 LOCAL_MODEL_DIR = "temp_models/"
 
+# Initialize face detection
 mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
 
 def download_model(username: str):
-    """Downloads face embeddings from SFTP."""
+    """Downloads face embeddings from SFTP for a given user."""
     model_remote_path = SFTP_REMOTE_PATH.format(username=username)
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
 
@@ -38,10 +39,11 @@ def download_model(username: str):
             return None
 
     except Exception as e:
+        print(f"SFTP error: {e}")
         return None
 
 def recognize_face(username: str, file):
-    """Receives an image, detects the face, and compares it with stored embeddings."""
+    """Receives an image, detects a face, and compares it with stored embeddings."""
     model_path = download_model(username)
 
     if not model_path:
@@ -50,7 +52,7 @@ def recognize_face(username: str, file):
     stored_embeddings = np.load(model_path)
 
     # Read uploaded image
-    contents = file.read()
+    contents = file.file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -62,7 +64,7 @@ def recognize_face(username: str, file):
     results = face_detection.process(img_rgb)
 
     if not results.detections:
-        return {"message": "No faces detected"}
+        return {"message": "No faces detected"}, 400
 
     recognized_faces = []
     for detection in results.detections:
