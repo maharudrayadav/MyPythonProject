@@ -13,10 +13,10 @@ LOCAL_MODEL_DIR = "temp_models/"
 
 # Initialize face detection
 mp_face_detection = mp.solutions.face_detection
-face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.5)
+face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def download_model(username: str):
-    """Downloads face embeddings from SFTP for a given user."""
+    """Downloads face embeddings from SFTP."""
     model_remote_path = SFTP_REMOTE_PATH.format(username=username)
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
 
@@ -28,31 +28,34 @@ def download_model(username: str):
         os.makedirs(LOCAL_MODEL_DIR, exist_ok=True)
 
         try:
-            sftp.stat(model_remote_path)
+            sftp.stat(model_remote_path)  # Check if file exists
             sftp.get(model_remote_path, local_model_path)
+            print(f"✅ Downloaded model: {local_model_path}")  # Debugging
             sftp.close()
             transport.close()
             return local_model_path
         except FileNotFoundError:
+            print(f"❌ Model file not found for {username}")
             sftp.close()
             transport.close()
             return None
 
     except Exception as e:
-        print(f"SFTP error: {e}")
+        print(f"⚠️ SFTP Error: {e}")
         return None
 
 def recognize_face(username: str, file):
-    """Receives an image, detects a face, and compares it with stored embeddings."""
+    """Receives an image, detects the face, and compares it with stored embeddings."""
     model_path = download_model(username)
 
     if not model_path:
         return {"error": f"Face embeddings not found for {username}"}, 404
 
     stored_embeddings = np.load(model_path)
+    print(f"🔍 Loaded embeddings shape: {stored_embeddings.shape}")  # Debugging
 
     # Read uploaded image
-    contents = file.file.read()
+    contents = file.read()
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
@@ -64,7 +67,7 @@ def recognize_face(username: str, file):
     results = face_detection.process(img_rgb)
 
     if not results.detections:
-        return {"message": "No faces detected"}, 400
+        return {"message": "No faces detected"}
 
     recognized_faces = []
     for detection in results.detections:
@@ -74,9 +77,13 @@ def recognize_face(username: str, file):
         face_crop = img_rgb[y:y + height, x:x + width]
 
         face_embedding = np.mean(face_crop, axis=(0, 1))  # Simple feature extraction
-        distance = np.linalg.norm(stored_embeddings - face_embedding)
+        print(f"🧐 Extracted face embedding: {face_embedding}")  # Debugging
 
-        if distance < 10.0:
+        distance = np.linalg.norm(stored_embeddings - face_embedding)
+        print(f"📏 Distance calculated: {distance}")  # Debugging
+
+        if distance < 10.0:  # Adjust threshold if needed
             recognized_faces.append({"name": username, "confidence": round(100 - distance, 2)})
 
     return {"recognized_faces": recognized_faces if recognized_faces else "Face not recognized"}
+
