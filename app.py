@@ -3,6 +3,8 @@ import paramiko
 import logging
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+from train_model import train_model
+
 
 # ✅ Load environment variables
 load_dotenv()
