@@ -19,21 +19,21 @@ def download_model(username: str):
     model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
-    transport = None
-    sftp = None
+    transport, sftp = None, None
     try:
+        print(f"🔄 Connecting to SFTP: {SFTP_HOST} as {SFTP_USERNAME}...")
         transport = paramiko.Transport((SFTP_HOST, 22))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
         os.makedirs(LOCAL_MODEL_DIR, exist_ok=True)
 
-        print(f"🔎 Checking file: {model_remote_path}")
+        print(f"🔍 Checking if model exists: {model_remote_path}")
 
         try:
             sftp.stat(model_remote_path)  # Check if file exists
             sftp.get(model_remote_path, local_model_path)
-            print(f"✅ Downloaded: {local_model_path}")
+            print(f"✅ Model downloaded successfully: {local_model_path}")
             return local_model_path
         except FileNotFoundError:
             print(f"❌ Model file not found: {model_remote_path}")
@@ -65,7 +65,8 @@ def recognize_face(username: str, file):
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
     if img is None:
-        return {"error": "Invalid image file"}, 400
+        print("❌ Image decoding failed.")
+        return {"error": "Invalid image format"}, 400
 
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -75,20 +76,31 @@ def recognize_face(username: str, file):
         return {"message": "No faces detected"}
 
     recognized_faces = []
+    h, w, _ = img.shape
+
     for detection in results.detections:
         bbox = detection.location_data.relative_bounding_box
-        h, w, _ = img.shape
-        x, y, width, height = int(bbox.xmin * w), int(bbox.ymin * h), int(bbox.width * w), int(bbox.height * h)
+        x, y = int(bbox.xmin * w), int(bbox.ymin * h)
+        width, height = int(bbox.width * w), int(bbox.height * h)
+
+        # Ensure bounding box is within image dimensions
+        x, y = max(0, x), max(0, y)
+        width, height = min(w - x, width), min(h - y, height)
+
+        if width == 0 or height == 0:
+            continue  # Skip invalid faces
+
         face_crop = img[y:y + height, x:x + width]
 
-        # Convert to grayscale for LBPH
+        # Convert to grayscale and resize for LBPH
         face_gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
+        face_gray = cv2.resize(face_gray, (100, 100))  # Resize to match LBPH input size
 
         # Predict using LBPH
         label, confidence = recognizer.predict(face_gray)
         print(f"🧐 Recognized Label: {label}, Confidence: {confidence}")  # Debugging
 
-        if confidence < 25:  # Lower confidence means better match
+        if confidence < 50:  # More flexible threshold
             recognized_faces.append({"name": username, "confidence": round(100 - confidence, 2)})
 
     return {"recognized_faces": recognized_faces if recognized_faces else "Face not recognized"}
