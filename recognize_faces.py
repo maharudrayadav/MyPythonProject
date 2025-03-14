@@ -1,132 +1,101 @@
 import os
+import cv2
+import numpy as np
 import paramiko
 import logging
-from dotenv import load_dotenv
-from flask import Flask, request, jsonify
-from train_model import train_model
-from flask_cors import CORS
-from recognize_faces import recognize_face
-import gc
-
-
-
+from flask import request, jsonify
+from PIL import Image
+from io import BytesIO
 
 # ✅ Load environment variables
-load_dotenv()
-
 SFTP_HOST = os.getenv("SFTP_HOST")
-SFTP_PORT = 22
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "dataset/"
+SFTP_REMOTE_PATH = "/model/Rudra/lbph_model_{username}.xml"
 
+# ✅ Configure Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-app = Flask(__name__)
-CORS(app, origins=["https://cloud-app-dlme.onrender.com"]) 
-def upload_to_sftp(local_path, remote_filename, user_name):
-    """Uploads image to SFTP in a user-specific folder."""
-    transport = None
-    sftp = None
+# ✅ Haar Cascade for Face Detection
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+
+def load_model_from_sftp(username):
+    """Loads the LBPH model from SFTP for the given user."""
+    model_remote_path = SFTP_REMOTE_PATH.format(username=username)
+    transport, sftp = None, None
+
     try:
-        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
+        logging.info(f"🔄 Connecting to SFTP: {SFTP_HOST} as {SFTP_USERNAME}...")
+        transport = paramiko.Transport((SFTP_HOST, 22))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
-        user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
+        # ✅ Check if file exists
         try:
-            sftp.chdir(user_sftp_path)
-        except IOError:
-            sftp.mkdir(user_sftp_path)
-            sftp.chdir(user_sftp_path)
+            file_size = sftp.stat(model_remote_path).st_size
+            if file_size == 0:
+                logging.error("⚠️ Model file is empty on SFTP")
+                return None
+        except FileNotFoundError:
+            logging.error(f"❌ Model file not found for {username}")
+            return None
 
-        remote_path = f"{user_sftp_path}/{remote_filename}"
-        sftp.put(local_path, remote_path)
+        # ✅ Read the model file
+        with sftp.open(model_remote_path, 'rb') as remote_file:
+            model_data = remote_file.read()
 
-        logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
-        return {"status": "success", "remote_path": remote_path}
-    
+        logging.info(f"✅ Model loaded successfully for {username}")
+        return BytesIO(model_data)
+
     except Exception as e:
-        logging.error(f"❌ SFTP Upload Error: {str(e)}")
-        return {"status": "error", "message": str(e)}
-
+        logging.error(f"⚠️ SFTP Load Error: {str(e)}")
+        return None
     finally:
         if sftp:
             sftp.close()
         if transport:
             transport.close()
-    gc.collect() 
 
-@app.route("/capture_faces", methods=["POST"])
-def capture_faces():
-    """Handles image uploads, stores 10 images per user, and uploads to SFTP."""
-    if "image" not in request.files or "name" not in request.form:
-        return jsonify({"error": "Missing file or name"}), 400
+def recognize_face(username, image_file):
+    """Recognizes a face using the LBPH model stored on SFTP."""
+    try:
+        # ✅ Load LBPH model from SFTP
+        model_data = load_model_from_sftp(username)
+        if not model_data:
+            return {"error": f"Face model not found for {username}"}
 
-    file = request.files["image"]
-    user_name = request.form["name"].strip()
+        recognizer = cv2.face.LBPHFaceRecognizer_create()
+        recognizer.read(model_data)
 
-    if file.filename == "":
-        return jsonify({"error": "No selected file"}), 400
+        # ✅ Convert image to OpenCV format
+        image = Image.open(image_file).convert("RGB")
+        image_np = np.array(image)
+        img_gray = cv2.cvtColor(image_np, cv2.COLOR_RGB2GRAY)
 
-    dataset_path = "dataset"
-    user_folder = os.path.join(dataset_path, user_name)
-    os.makedirs(user_folder, exist_ok=True)
+        # ✅ Detect faces
+        faces = face_cascade.detectMultiScale(img_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
-    # ✅ Count existing images to ensure only 10 are stored
-    existing_images = sorted([f for f in os.listdir(user_folder) if f.endswith(".jpg")])
-    
-    if len(existing_images) >= 10:
-        oldest_image = os.path.join(user_folder, existing_images[0])
-        os.remove(oldest_image)  # ✅ Remove the oldest image
-        existing_images.pop(0)
+        if len(faces) == 0:
+            return {"message": "No face detected"}
 
-    # ✅ Determine new filename
-    new_image_index = len(existing_images) + 1
-    image_filename = f"{user_name}_{new_image_index}.jpg"
-    image_path = os.path.join(user_folder, image_filename)
-    
-    # ✅ Save Image Locally
-    file.save(image_path)
+        recognized_faces = []
 
-    # ✅ Upload to SFTP
-    upload_result = upload_to_sftp(image_path, image_filename, user_name)
+        # ✅ Compare detected faces with LBPH model
+        for (x, y, w, h) in faces:
+            face_crop = img_gray[y:y + h, x:x + w]
+            face_crop = cv2.resize(face_crop, (100, 100))
 
-    return jsonify({
-        "message": f"Image {new_image_index}/10 captured successfully",
-        "sftp_result": upload_result
-    }), 200
+            try:
+                label, confidence = recognizer.predict(face_crop)
+                if confidence < 50:  # Lower confidence means better match
+                    recognized_faces.append({"name": username, "confidence": round(100 - confidence, 2)})
+                    return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
 
-@app.route("/train_model", methods=["POST"])
-def train():
-    data = request.get_json()
-    user_name = data.get("user_name")
+            except Exception as e:
+                return {"error": f"Prediction error: {str(e)}"}
 
-    if not user_name:
-        return jsonify({"status": "error", "message": "Missing 'user_name'"}), 400
+        return {"message": "Face not recognized"}
 
-    result = train_model(user_name)
-    
-    if result["status"] == "error":
-        return jsonify(result), 400
-
-    return jsonify(result), 200
-
-@app.route("/recognize", methods=["POST"])
-def recognize():
-    if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
-    
-    file = request.files["image"]
-    username = request.form.get("username", "").strip()
-
-    if not username:
-        return jsonify({"error": "Username is required"}), 400
-
-    result = recognize_face(username, file)
-    return jsonify(result)
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    logging.info(f"🚀 Starting server on port {port}") 
-    app.run(host='0.0.0.0', port=port)
+    except Exception as e:
+        logging.error(f"❌ Recognition Error: {str(e)}")
+        return {"error": str(e)}
