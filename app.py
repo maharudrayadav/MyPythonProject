@@ -1,6 +1,3 @@
-from train_model import train_model
-from flask_cors import CORS
-from recognize_faces import recognize_face
 import os
 import cv2
 import logging
