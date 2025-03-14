@@ -131,6 +131,10 @@ def recognize():
     except Exception as e:
         logging.error(f"❌ Recognition Error: {str(e)}")
         return jsonify({"error": str(e)}), 500
+        
+@app.route("/capmy", methods=["GET"])
+def capmy():
+    return jsonify({"success": True}), 200
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
