@@ -1,161 +1,132 @@
-from flask import request, jsonify
 import os
-import cv2
-import numpy as np
-import requests
-from PIL import Image
-from io import BytesIO
 import paramiko
+import logging
+from dotenv import load_dotenv
+from flask import Flask, request, jsonify
+from train_model import train_model
+from flask_cors import CORS
+from recognize_faces import recognize_face
+import gc
 
-# Load environment variables
+
+
+
+# ✅ Load environment variables
+load_dotenv()
+
 SFTP_HOST = os.getenv("SFTP_HOST")
+SFTP_PORT = 22
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
+SFTP_REMOTE_PATH = "dataset/"
 
-# Face++ API Credentials
-FACEPP_API_KEY = os.getenv("FACEPP_API_KEY")
-FACEPP_API_SECRET = os.getenv("FACEPP_API_SECRET")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Face++ API URLs
-FACE_DETECT_URL = "https://api-us.faceplusplus.com/facepp/v3/detect"
-FACE_COMPARE_URL = "https://api-us.faceplusplus.com/facepp/v3/compare"
-
-# Dataset Path
-DATASET_PATH = "/dataset/Ansh/dataset/Ansh/"
-IMAGE_COUNT = 10
-
-# Store Face++ face tokens for stored images
-stored_faces = {}
-
-def get_face_token(image_data):
-    """Uploads an image to Face++ and gets a face_token."""
-    response = requests.post(
-        FACE_DETECT_URL,
-        data={"api_key": FACEPP_API_KEY, "api_secret": FACEPP_API_SECRET},
-        files={"image_file": image_data},
-    ).json()
-
-    if "faces" in response and response["faces"]:
-        return response["faces"][0]["face_token"]
-    return None
-
-def store_face_tokens():
-    """Uploads stored images and saves their face tokens."""
-    global stored_faces
-    stored_faces = {
-        f"Ansh_{i}.jpg": get_face_token(open(os.path.join(DATASET_PATH, f"Ansh_{i}.jpg"), "rb"))
-        for i in range(1, IMAGE_COUNT + 1)
-    }
-    print("✅ Stored Face Tokens:", stored_faces)
-
-def load_model_from_sftp(username):
-    """Loads the LBPH model from SFTP for the given user."""
-    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
-    transport, sftp = None, None
-
+app = Flask(__name__)
+CORS(app, origins=["https://cloud-app-dlme.onrender.com"]) 
+def upload_to_sftp(local_path, remote_filename, user_name):
+    """Uploads image to SFTP in a user-specific folder."""
+    transport = None
+    sftp = None
     try:
-        print(f"🔄 Connecting to SFTP: {SFTP_HOST} as {SFTP_USERNAME}...")
-        transport = paramiko.Transport((SFTP_HOST, 22))
+        transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
-        # Check if file exists and has content
+        user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
         try:
-            file_size = sftp.stat(model_remote_path).st_size
-            if file_size == 0:
-                print("⚠️ Model file is empty on SFTP")
-                return None
-        except FileNotFoundError:
-            print(f"❌ Model file not found for {username}")
-            return None
+            sftp.chdir(user_sftp_path)
+        except IOError:
+            sftp.mkdir(user_sftp_path)
+            sftp.chdir(user_sftp_path)
 
-        with sftp.open(model_remote_path, 'rb') as remote_file:
-            model_data = remote_file.read()
+        remote_path = f"{user_sftp_path}/{remote_filename}"
+        sftp.put(local_path, remote_path)
 
-        print("✅ Model loaded successfully from SFTP")
-        return BytesIO(model_data)
+        logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
+        return {"status": "success", "remote_path": remote_path}
+    
     except Exception as e:
-        print(f"⚠️ Error loading model from SFTP: {e}")
-        return None
+        logging.error(f"❌ SFTP Upload Error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
     finally:
         if sftp:
             sftp.close()
         if transport:
             transport.close()
+    gc.collect() 
 
-def recognize_with_lbph(username, image):
-    """Recognizes a face using the LBPH model."""
-    model_data = load_model_from_sftp(username)
-    if not model_data:
-        return None  # If no model, fallback to Face++
+@app.route("/capture_faces", methods=["POST"])
+def capture_faces():
+    """Handles image uploads, stores 10 images per user, and uploads to SFTP."""
+    if "image" not in request.files or "name" not in request.form:
+        return jsonify({"error": "Missing file or name"}), 400
 
-    recognizer = cv2.face.LBPHFaceRecognizer_create()
-    model_stream = BytesIO(model_data)
-    recognizer.read(model_stream)
+    file = request.files["image"]
+    user_name = request.form["name"].strip()
 
-    img_np = np.array(Image.open(image))
-    img_gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-    img_gray = cv2.resize(img_gray, (100, 100))
+    if file.filename == "":
+        return jsonify({"error": "No selected file"}), 400
 
-    label, confidence = recognizer.predict(img_gray)
-    print(f"🧐 Recognized Label: {label}, Confidence: {confidence}")
+    dataset_path = "dataset"
+    user_folder = os.path.join(dataset_path, user_name)
+    os.makedirs(user_folder, exist_ok=True)
 
-    if confidence < 50:
-        return {"recognized_faces": [{"name": username, "confidence": round(100 - confidence, 2)}]}
+    # ✅ Count existing images to ensure only 10 are stored
+    existing_images = sorted([f for f in os.listdir(user_folder) if f.endswith(".jpg")])
+    
+    if len(existing_images) >= 10:
+        oldest_image = os.path.join(user_folder, existing_images[0])
+        os.remove(oldest_image)  # ✅ Remove the oldest image
+        existing_images.pop(0)
 
-    return None  # If LBPH fails, fallback to Face++
+    # ✅ Determine new filename
+    new_image_index = len(existing_images) + 1
+    image_filename = f"{user_name}_{new_image_index}.jpg"
+    image_path = os.path.join(user_folder, image_filename)
+    
+    # ✅ Save Image Locally
+    file.save(image_path)
 
-def compare_with_stored_faces(new_image):
-    """Compares a new image with stored images using Face++."""
-    new_face_token = get_face_token(new_image)
-    if not new_face_token:
-        return {"message": "No face detected in the new image"}
+    # ✅ Upload to SFTP
+    upload_result = upload_to_sftp(image_path, image_filename, user_name)
 
-    best_match = None
-    highest_confidence = 0
+    return jsonify({
+        "message": f"Image {new_image_index}/10 captured successfully",
+        "sftp_result": upload_result
+    }), 200
 
-    for img_name, stored_token in stored_faces.items():
-        response = requests.post(
-            FACE_COMPARE_URL,
-            data={
-                "api_key": FACEPP_API_KEY,
-                "api_secret": FACEPP_API_SECRET,
-                "face_token1": new_face_token,
-                "face_token2": stored_token,
-            },
-        ).json()
+@app.route("/train_model", methods=["POST"])
+def train():
+    data = request.get_json()
+    user_name = data.get("user_name")
 
-        confidence = response.get("confidence", 0)
-        if confidence > highest_confidence:
-            highest_confidence = confidence
-            best_match = img_name
+    if not user_name:
+        return jsonify({"status": "error", "message": "Missing 'user_name'"}), 400
 
-    return {"best_match": best_match, "confidence": highest_confidence}
+    result = train_model(user_name)
+    
+    if result["status"] == "error":
+        return jsonify(result), 400
 
-def recognize_face():
-    """Receives image from frontend, compares with stored faces, and returns result."""
-    try:
-        if "image" not in request.files:
-            return jsonify({"error": "No image received"}), 400
+    return jsonify(result), 200
 
-        image_file = request.files["image"]
-        username = request.form.get("username", "Unknown")
+@app.route("/recognize", methods=["POST"])
+def recognize():
+    if "image" not in request.files:
+        return jsonify({"error": "No image uploaded"}), 400
+    
+    file = request.files["image"]
+    username = request.form.get("username", "").strip()
 
-        # Save temporarily
-        temp_path = "/tmp/live_capture.jpg"
-        image = Image.open(image_file)
-        image.save(temp_path)
+    if not username:
+        return jsonify({"error": "Username is required"}), 400
 
-        # Try LBPH first
-        lbph_result = recognize_with_lbph(username, temp_path)
-        if lbph_result:
-            return jsonify(lbph_result)
+    result = recognize_face(username, file)
+    return jsonify(result)
 
-        # Fallback to Face++ if LBPH fails
-        result = compare_with_stored_faces(open(temp_path, "rb"))
-
-        return jsonify({"username": username, "result": result})
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    logging.info(f"🚀 Starting server on port {port}") 
+    app.run(host='0.0.0.0', port=port)
