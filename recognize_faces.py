@@ -88,7 +88,7 @@ def recognize_face(username: str, file):
         label, confidence = recognizer.predict(face_gray)
         print(f"🧐 Recognized Label: {label}, Confidence: {confidence}")  # Debugging
 
-        if confidence < 70:  # Lower confidence means better match
+        if confidence < 25:  # Lower confidence means better match
             recognized_faces.append({"name": username, "confidence": round(100 - confidence, 2)})
 
     return {"recognized_faces": recognized_faces if recognized_faces else "Face not recognized"}
