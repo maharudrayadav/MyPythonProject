@@ -16,10 +16,11 @@ mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def download_model(username: str):
-    """Downloads the LBPH model from SFTP."""
-    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"  # Updated filename
-    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
+    model_remote_path = f"/model/{username}/face_embedding_{username}.npy"
+    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
 
+    transport = None
+    sftp = None
     try:
         transport = paramiko.Transport((SFTP_HOST, 22))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
@@ -27,24 +28,24 @@ def download_model(username: str):
 
         os.makedirs(LOCAL_MODEL_DIR, exist_ok=True)
 
-        print(f"🔎 Checking file: {model_remote_path}")  # Debugging
+        print(f"🔎 Checking file: {model_remote_path}")
 
         try:
             sftp.stat(model_remote_path)  # Check if file exists
             sftp.get(model_remote_path, local_model_path)
-            print(f"✅ Downloaded: {local_model_path}")  # Debugging
+            print(f"✅ Downloaded: {local_model_path}")
             return local_model_path
         except FileNotFoundError:
-            print(f"❌ Model file not found: {model_remote_path}")  # Debugging
+            print(f"❌ Model file not found: {model_remote_path}")
             return None
-        finally:
-            sftp.close()
-            transport.close()  # Ensure this is always closed
-            print("🔒 SFTP connection closed")
-
     except Exception as e:
         print(f"⚠️ SFTP Error: {e}")
         return None
+    finally:
+        if sftp:
+            sftp.close()
+        if transport:
+            transport.close()
 
 
 def recognize_face(username: str, file):
