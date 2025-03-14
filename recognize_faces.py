@@ -100,8 +100,8 @@ def recognize_face(username, image_file):
         logging.error(f"❌ Prediction error: {str(e)}")
         return {"error": f"Prediction error: {str(e)}"}
 
-logging.info("❌ Face not recognized")
-return {"message": "Face not recognized"}
+    logging.info("❌ Face not recognized")
+    return {"message": "Face not recognized"}
 
 
     except Exception as e:
