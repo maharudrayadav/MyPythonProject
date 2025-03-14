@@ -1,6 +1,6 @@
 opencv-python
 opencv-contrib-python
-numpy
+numpy==1.23.5  # Use a compatible version for Python 3.11
 Pillow
 paramiko
 flask-cors
@@ -9,6 +9,4 @@ insightface
 fastapi
 pydantic
 gunicorn
-mediapipe
-PIL
-
+mediapipe==0.10.8  # Compatible with Python 3.11+
