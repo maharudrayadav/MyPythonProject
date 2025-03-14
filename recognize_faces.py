@@ -22,21 +22,25 @@ mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def load_model_from_sftp(username: str):
-    """Load the LBPH model directly from SFTP without downloading."""
     model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
     transport, sftp = None, None
-    
+
     try:
         print(f"🔄 Connecting to SFTP: {SFTP_HOST} as {SFTP_USERNAME}...")
         transport = paramiko.Transport((SFTP_HOST, 22))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
-        
+
         with sftp.open(model_remote_path, 'rb') as remote_file:
-            model_data = remote_file.read()
-        
+            model_data = b""
+            while True:
+                chunk = remote_file.read(1024)  # Read in 1KB chunks
+                if not chunk:
+                    break
+                model_data += chunk
+
         print("✅ Model loaded successfully from SFTP")
-        return model_data
+        return BytesIO(model_data)
     except Exception as e:
         print(f"⚠️ Error loading model from SFTP: {e}")
         return None
@@ -45,6 +49,7 @@ def load_model_from_sftp(username: str):
             sftp.close()
         if transport:
             transport.close()
+
 
 def recognize_face(username: str, file):
     """Recognizes a face using the remote LBPH model."""
