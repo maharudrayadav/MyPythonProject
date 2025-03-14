@@ -11,7 +11,7 @@ from io import BytesIO
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "/model/Rudra/lbph_model_{username}.xml"
+SFTP_REMOTE_PATH = "/model/{username}/lbph_model_{username}.xml"
 
 # ✅ Configure Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
