@@ -82,21 +82,27 @@ def recognize_face(username, image_file):
 
         # ✅ Compare detected faces with LBPH model
         for (x, y, w, h) in faces:
-            face_crop = img_gray[y:y + h, x:x + w]
-            face_crop = cv2.resize(face_crop, (100, 100))
+    face_crop = img_gray[y:y + h, x:x + w]
+    face_crop = cv2.resize(face_crop, (100, 100))
 
-            try:
-                label, confidence = recognizer.predict(face_crop)
-                if confidence > 10:  # Lower confidence means better match
-                    recognized_faces.append({"name": username, "confidence": round(100 - confidence, 2)})
-                    logging.info(f"✅ Face recognized: {username} (Confidence: {confidence:.2f})")
-                    return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
+    try:
+        label, confidence = recognizer.predict(face_crop)
+        match_confidence = round(100 - confidence, 2)  # Convert confidence to match percentage
 
-            except Exception as e:
-                logging.error(f"❌ Prediction error: {str(e)}")
-                return {"error": f"Prediction error: {str(e)}"}
-        logging.info("❌ Face not recognized")
-        return {"message": "Face not recognized"}
+        if match_confidence >= 20:  # Ensure match confidence is at least 20%
+            recognized_faces.append({"name": username, "confidence": match_confidence})
+            logging.info(f"✅ Face recognized: {username} (Confidence: {match_confidence:.2f}%)")
+            return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
+        else:
+            logging.info(f"❌ Face not recognized: Low confidence ({match_confidence:.2f}%)")
+
+    except Exception as e:
+        logging.error(f"❌ Prediction error: {str(e)}")
+        return {"error": f"Prediction error: {str(e)}"}
+
+logging.info("❌ Face not recognized")
+return {"message": "Face not recognized"}
+
 
     except Exception as e:
         logging.error(f"❌ Recognition Error: {str(e)}")
