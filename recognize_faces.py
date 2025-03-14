@@ -8,7 +8,6 @@ import mediapipe as mp
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "model/{username}/lbph_model_{username}.xml"
 LOCAL_MODEL_DIR = "temp_models/"
 
 # Initialize face detection
@@ -16,6 +15,7 @@ mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def download_model(username: str):
+    """Download the LBPH model from the SFTP server for a given username."""
     model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
@@ -38,6 +38,9 @@ def download_model(username: str):
         except FileNotFoundError:
             print(f"❌ Model file not found: {model_remote_path}")
             return None
+    except paramiko.SSHException as e:
+        print(f"⚠️ SSH Connection Error: {e}")
+        return None
     except Exception as e:
         print(f"⚠️ SFTP Error: {e}")
         return None
@@ -51,7 +54,6 @@ def download_model(username: str):
 def recognize_face(username: str, file):
     """Receives an image, detects the face, and compares it with the stored LBPH model."""
     model_path = download_model(username)
-
     if not model_path:
         return {"error": f"Face model not found for {username}"}, 404
 
@@ -61,19 +63,21 @@ def recognize_face(username: str, file):
 
     # Read uploaded image
     contents = file.read()
+    if not contents:
+        return {"error": "Empty image file"}, 400
+
     nparr = np.frombuffer(contents, np.uint8)
     img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
+    
     if img is None:
         print("❌ Image decoding failed.")
         return {"error": "Invalid image format"}, 400
 
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
     results = face_detection.process(img_rgb)
 
     if not results.detections:
-        return {"message": "No faces detected"}
+        return {"message": "No faces detected in the image"}, 400
 
     recognized_faces = []
     h, w, _ = img.shape
@@ -91,8 +95,6 @@ def recognize_face(username: str, file):
             continue  # Skip invalid faces
 
         face_crop = img[y:y + height, x:x + width]
-
-        # Convert to grayscale and resize for LBPH
         face_gray = cv2.cvtColor(face_crop, cv2.COLOR_RGB2GRAY)
         face_gray = cv2.resize(face_gray, (100, 100))  # Resize to match LBPH input size
 
