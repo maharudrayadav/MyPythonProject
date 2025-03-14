@@ -89,7 +89,7 @@ def recognize_face(username, image_file):
                 label, confidence = recognizer.predict(face_crop)
                 match_confidence = round(100 - confidence, 2)
 
-                if confidence < 120:
+                if confidence <= 130:
                     recognized_faces.append({"name": username, "confidence": confidence})
                     logging.info(f"✅ Face recognized: {username} (Confidence: {confidence:.2f})")
                 else:
