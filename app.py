@@ -25,14 +25,14 @@ app = Flask(__name__)
 CORS(app, origins=["https://cloud-app-dlme.onrender.com"]) 
 def upload_to_sftp(local_path, remote_filename, user_name):
     """Uploads image to SFTP in a user-specific folder."""
+    transport = None
+    sftp = None
     try:
         transport = paramiko.Transport((SFTP_HOST, SFTP_PORT))
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
 
         user_sftp_path = f"{SFTP_REMOTE_PATH}/{user_name}"
-        
-        # ✅ Ensure user directory exists
         try:
             sftp.chdir(user_sftp_path)
         except IOError:
@@ -42,14 +42,18 @@ def upload_to_sftp(local_path, remote_filename, user_name):
         remote_path = f"{user_sftp_path}/{remote_filename}"
         sftp.put(local_path, remote_path)
 
-        sftp.close()
-        transport.close()
         logging.info(f"✅ Uploaded {remote_filename} to {user_sftp_path}")
         return {"status": "success", "remote_path": remote_path}
     
     except Exception as e:
         logging.error(f"❌ SFTP Upload Error: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+    finally:
+        if sftp:
+            sftp.close()
+        if transport:
+            transport.close()
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
