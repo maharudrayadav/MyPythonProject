@@ -16,7 +16,7 @@ mp_face_detection = mp.solutions.face_detection
 face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detection_confidence=0.3)
 
 def download_model(username: str):
-    model_remote_path = f"/model/{username}/lbph_model_{username}"
+    model_remote_path = f"/model/{username}/lbph_model_{username}.xml"
     local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
     transport = None
