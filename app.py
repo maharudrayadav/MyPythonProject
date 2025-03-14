@@ -6,6 +6,7 @@ from flask import Flask, request, jsonify
 from train_model import train_model
 from flask_cors import CORS
 from recognize_faces import recognize_face
+import gc
 
 
 
@@ -54,6 +55,7 @@ def upload_to_sftp(local_path, remote_filename, user_name):
             sftp.close()
         if transport:
             transport.close()
+    gc.collect() 
 
 @app.route("/capture_faces", methods=["POST"])
 def capture_faces():
