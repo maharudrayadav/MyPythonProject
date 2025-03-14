@@ -81,28 +81,27 @@ def recognize_face(username, image_file):
         recognized_faces = []
 
         # ✅ Compare detected faces with LBPH model
-       for (x, y, w, h) in faces:
-    face_crop = img_gray[y:y + h, x:x + w]  # Ensure this line is indented properly
-    face_crop = cv2.resize(face_crop, (100, 100))
+        for (x, y, w, h) in faces:
+            face_crop = img_gray[y:y + h, x:x + w]
+            face_crop = cv2.resize(face_crop, (100, 100))
 
-    try:
-        label, confidence = recognizer.predict(face_crop)
-        match_confidence = round(100 - confidence, 2)  # Convert confidence to percentage
+            try:
+                label, confidence = recognizer.predict(face_crop)
+                match_confidence = round(100 - confidence, 2)  # Convert confidence to percentage
 
-        if match_confidence >= 20:  # Ensure match confidence is at least 20%
-            recognized_faces.append({"name": username, "confidence": match_confidence})
-            logging.info(f"✅ Face recognized: {username} (Confidence: {match_confidence:.2f}%)")
-            return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
-        else:
-            logging.info(f"❌ Face not recognized: Low confidence ({match_confidence:.2f}%)")
+                if match_confidence >= 20:  # Ensure match confidence is at least 20%
+                    recognized_faces.append({"name": username, "confidence": match_confidence})
+                    logging.info(f"✅ Face recognized: {username} (Confidence: {match_confidence:.2f}%)")
+                    return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
+                else:
+                    logging.info(f"❌ Face not recognized: Low confidence ({match_confidence:.2f}%)")
 
-    except Exception as e:
-        logging.error(f"❌ Prediction error: {str(e)}")
-        return {"error": f"Prediction error: {str(e)}"}
+            except Exception as e:
+                logging.error(f"❌ Prediction error: {str(e)}")
+                return {"error": f"Prediction error: {str(e)}"}
 
-    logging.info("❌ Face not recognized")
-    return {"message": "Face not recognized"}
-
+        logging.info("❌ Face not recognized")
+        return {"message": "Face not recognized"}
 
     except Exception as e:
         logging.error(f"❌ Recognition Error: {str(e)}")
