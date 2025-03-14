@@ -92,7 +92,7 @@ def recognize_face(username, image_file):
                     recognized_faces.append({"name": username, "confidence": confidence})
                     logging.info(f"✅ Face recognized: {username} (Confidence: {confidence:.2f})")
                 else:
-                    logging.info(f"❌ Face not recognized: Low confidence ({match_confidence:.2f}%)")
+                    logging.info(f"❌ Face not recognized: Low (Confidence: {confidence:.2f})")
 
             except Exception as e:
                 logging.error(f"❌ Prediction error: {str(e)}")
