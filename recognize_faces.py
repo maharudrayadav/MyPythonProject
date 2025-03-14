@@ -5,7 +5,6 @@ import paramiko
 import logging
 from flask import request, jsonify
 from PIL import Image
-from io import BytesIO
 
 # ✅ Load environment variables
 SFTP_HOST = os.getenv("SFTP_HOST")
@@ -65,7 +64,7 @@ def recognize_face(username, image_file):
             return {"error": f"Face model not found for {username}"}
 
         recognizer = cv2.face.LBPHFaceRecognizer_create()
-        recognizer.read(model_path)  # ✅ Fix: Use the actual file path
+        recognizer.read(model_path)
 
         # ✅ Convert image to OpenCV format
         image = Image.open(image_file).convert("RGB")
@@ -76,6 +75,7 @@ def recognize_face(username, image_file):
         faces = face_cascade.detectMultiScale(img_gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
 
         if len(faces) == 0:
+            logging.info("❌ No face detected in the image")
             return {"message": "No face detected"}
 
         recognized_faces = []
@@ -89,16 +89,18 @@ def recognize_face(username, image_file):
                 label, confidence = recognizer.predict(face_crop)
                 match_confidence = round(100 - confidence, 2)  # Convert confidence to percentage
 
-                if match_confidence >=15:  # Ensure match confidence is at least 20%
+                if match_confidence >= 15:  # Ensure match confidence is at least 15%
                     recognized_faces.append({"name": username, "confidence": match_confidence})
                     logging.info(f"✅ Face recognized: {username} (Confidence: {match_confidence:.2f}%)")
-                    return {"recognized_faces": recognized_faces}  # ✅ Immediate response if recognized
                 else:
                     logging.info(f"❌ Face not recognized: Low confidence ({match_confidence:.2f}%)")
 
             except Exception as e:
                 logging.error(f"❌ Prediction error: {str(e)}")
                 return {"error": f"Prediction error: {str(e)}"}
+
+        if recognized_faces:
+            return {"recognized_faces": recognized_faces}
 
         logging.info("❌ Face not recognized")
         return {"message": "Face not recognized"}
