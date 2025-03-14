@@ -17,7 +17,7 @@ face_detection = mp_face_detection.FaceDetection(model_selection=1, min_detectio
 
 def download_model(username: str):
     model_remote_path = f"/model/{username}/face_embedding_{username}.npy"
-    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"face_embedding_{username}.npy")
+    local_model_path = os.path.join(LOCAL_MODEL_DIR, f"lbph_model_{username}.xml")
 
     transport = None
     sftp = None
