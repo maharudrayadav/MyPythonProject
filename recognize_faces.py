@@ -11,7 +11,7 @@ from io import BytesIO
 SFTP_HOST = os.getenv("SFTP_HOST")
 SFTP_USERNAME = os.getenv("SFTP_USERNAME")
 SFTP_PASSWORD = os.getenv("SFTP_PASSWORD")
-SFTP_REMOTE_PATH = "/model/{username}/lbph_model_{username}.xml"
+SFTP_REMOTE_PATH = "/model/Rudra/lbph_model_{username}.xml"
 
 # ✅ Configure Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
 def load_model_from_sftp(username, max_retries=3, timeout=30):
-    """Loads the LBPH model from SFTP with timeout and retry mechanism."""
+    """Loads the LBPH model from SFTP with retries and chunked reading."""
     model_remote_path = SFTP_REMOTE_PATH.format(username=username)
     transport, sftp = None, None
 
@@ -42,12 +42,19 @@ def load_model_from_sftp(username, max_retries=3, timeout=30):
                 logging.error(f"❌ Model file not found for {username}")
                 return None
 
-            # ✅ Read the model file efficiently
+            # ✅ Read model in chunks (prevents memory overuse)
+            logging.info(f"📂 Reading model file: {model_remote_path} ({file_size} bytes)")
+            model_data = BytesIO()
             with sftp.open(model_remote_path, 'rb') as remote_file:
-                model_data = remote_file.read()
+                while True:
+                    chunk = remote_file.read(1024 * 1024)  # Read 1MB at a time
+                    if not chunk:
+                        break
+                    model_data.write(chunk)
 
+            model_data.seek(0)
             logging.info(f"✅ Model loaded successfully for {username}")
-            return BytesIO(model_data)
+            return model_data
 
         except paramiko.SSHException as e:
             logging.error(f"⚠️ SFTP SSH Error: {str(e)} (Retry {attempt}/{max_retries})")
