@@ -81,13 +81,13 @@ def recognize_face(username, image_file):
         recognized_faces = []
 
         # ✅ Compare detected faces with LBPH model
-        for (x, y, w, h) in faces:
-    face_crop = img_gray[y:y + h, x:x + w]
+       for (x, y, w, h) in faces:
+    face_crop = img_gray[y:y + h, x:x + w]  # Ensure this line is indented properly
     face_crop = cv2.resize(face_crop, (100, 100))
 
     try:
         label, confidence = recognizer.predict(face_crop)
-        match_confidence = round(100 - confidence, 2)  # Convert confidence to match percentage
+        match_confidence = round(100 - confidence, 2)  # Convert confidence to percentage
 
         if match_confidence >= 20:  # Ensure match confidence is at least 20%
             recognized_faces.append({"name": username, "confidence": match_confidence})
