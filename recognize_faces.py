@@ -32,12 +32,11 @@ def load_model_from_sftp(username: str):
         transport.connect(username=SFTP_USERNAME, password=SFTP_PASSWORD)
         sftp = paramiko.SFTPClient.from_transport(transport)
         
-        with sftp.file(model_remote_path, 'rb') as remote_file:
+        with sftp.open(model_remote_path, 'rb') as remote_file:
             model_data = remote_file.read()
-            model_stream = BytesIO(model_data)
         
         print("✅ Model loaded successfully from SFTP")
-        return model_stream
+        return model_data
     except Exception as e:
         print(f"⚠️ Error loading model from SFTP: {e}")
         return None
@@ -49,12 +48,13 @@ def load_model_from_sftp(username: str):
 
 def recognize_face(username: str, file):
     """Recognizes a face using the remote LBPH model."""
-    model_stream = load_model_from_sftp(username)
-    if not model_stream:
+    model_data = load_model_from_sftp(username)
+    if not model_data:
         return {"error": f"Face model not found for {username}"}, 404
     
     # Load LBPH model from memory
     recognizer = cv2.face.LBPHFaceRecognizer_create()
+    model_stream = BytesIO(model_data)
     recognizer.read(model_stream)
     
     contents = file.read()
