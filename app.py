@@ -114,17 +114,23 @@ def train():
 
 @app.route("/recognize", methods=["POST"])
 def recognize():
-    if "image" not in request.files:
-        return jsonify({"error": "No image uploaded"}), 400
-    
-    file = request.files["image"]
-    username = request.form.get("username", "").strip()
+    """Recognizes a face using the LBPH model stored on SFTP."""
+    try:
+        if "image" not in request.files or "username" not in request.form:
+            return jsonify({"error": "Missing image or username"}), 400
+        
+        file = request.files["image"]
+        username = request.form["username"].strip()
 
-    if not username:
-        return jsonify({"error": "Username is required"}), 400
+        if not username:
+            return jsonify({"error": "Invalid username"}), 400
 
-    result = recognize_face(username, file)
-    return jsonify(result)
+        result = recognize_face(username, file)
+        return jsonify(result), 200
+
+    except Exception as e:
+        logging.error(f"❌ Recognition Error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
