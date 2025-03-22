@@ -23,7 +23,7 @@ SFTP_REMOTE_PATH = "dataset/"
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 app = Flask(__name__)
-CORS(app, origins=["https://mymanagementsystem.onrender.com/"]) 
+CORS(app, origins=["https://mymanagementsystem.onrender.com"]) 
 def upload_to_sftp(local_path, remote_filename, user_name):
     """Uploads image to SFTP in a user-specific folder."""
     transport = None
